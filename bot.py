@@ -105,22 +105,32 @@ async def help_cmd(event):
 
 
 # ── Forward qilingan story ────────────────────────────────────────────────────
-@bot.on(events.NewMessage(func=lambda e: bool(e.forward)))
+@bot.on(events.NewMessage)
 async def handle_forward(event):
     if event.date and event.date < STARTUP_TIME:
         return
 
-    if not (hasattr(event.forward, 'story') and event.forward.story):
-        return  # Story emas, oddiy forward — e'tiborsiz
+    # Forward story aniqlash — turli Telethon versiyalarida turlicha keladi
+    story_id = None
+    peer = None
+
+    try:
+        # Variant 1: event.message.media — MessageStory turi
+        from telethon.tl.types import MessageMediaStory
+        if event.message and event.message.media and isinstance(event.message.media, MessageMediaStory):
+            media = event.message.media
+            story_id = media.id
+            peer = media.peer
+    except Exception:
+        pass
+
+    if story_id is None or peer is None:
+        return  # Story forward emas — keyingi handlerga o'tadi
 
     msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
     try:
-        fwd = event.forward
-        story_obj = fwd.story
-        peer = fwd.from_id
-
         entity = await userbot.get_entity(peer)
-        story = await get_story_by_id(entity, story_obj.id)
+        story = await get_story_by_id(entity, story_id)
 
         if story is None:
             await msg.edit("❌ Story topilmadi yoki muddati o'tgan!")
@@ -135,7 +145,7 @@ async def handle_forward(event):
 
 
 # ── Asosiy handler ────────────────────────────────────────────────────────────
-@bot.on(events.NewMessage(func=lambda e: not e.forward))
+@bot.on(events.NewMessage)
 async def handle_message(event):
     if event.text and event.text.startswith("/"):
         return
@@ -144,7 +154,18 @@ async def handle_message(event):
     if event.date and event.date < STARTUP_TIME:
         return
 
+    # MessageMediaStory bo'lsa — handle_forward hal qiladi
+    try:
+        from telethon.tl.types import MessageMediaStory
+        if event.message and event.message.media and isinstance(event.message.media, MessageMediaStory):
+            return
+    except Exception:
+        pass
+
     text = event.text or ""
+    if not text:
+        return
+
     msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
 
     try:
