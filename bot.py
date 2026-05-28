@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+from datetime import datetime, timezone
 from telethon import TelegramClient, events
 from telethon.tl.functions.stories import (
     GetPeerStoriesRequest,
@@ -8,6 +9,9 @@ from telethon.tl.functions.stories import (
     GetStoriesArchiveRequest,
 )
 from telethon.sessions import StringSession
+
+# Bot ishga tushgan vaqt — bundan oldingi xabarlar e'tiborga olinmaydi
+STARTUP_TIME = datetime.now(timezone.utc)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 API_ID = int(os.environ.get("API_ID"))
@@ -106,6 +110,10 @@ async def handle_message(event):
     if event.text and event.text.startswith("/"):
         return
 
+    # Eski xabarlarni o'tkazib yuborish
+    if event.date and event.date < STARTUP_TIME:
+        return
+
     # ── Forward qilingan story ─────────────────────────────────────────────
     if event.forward and hasattr(event.forward, 'story') and event.forward.story:
         msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
@@ -192,8 +200,15 @@ async def handle_message(event):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 async def main():
-    await userbot.start()
+    # Userbot — SESSION_STRING bilan ulanadi, telefon so'ramaydi
+    await userbot.connect()
+    if not await userbot.is_user_authorized():
+        raise RuntimeError(
+            "❌ SESSION_STRING noto'g'ri yoki muddati o'tgan! "
+            "Yangi SESSION_STRING yarating va Railway Variables ga qo'ying."
+        )
     print("✅ Userbot ishga tushdi!")
+
     await bot.start(bot_token=BOT_TOKEN)
     print("✅ Bot ishga tushdi!")
     await asyncio.gather(
