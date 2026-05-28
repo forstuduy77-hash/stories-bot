@@ -11,7 +11,7 @@ API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
 userbot = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
-bot = TelegramClient('bot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+bot = TelegramClient('bot', API_ID, API_HASH)
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
@@ -20,8 +20,7 @@ async def start(event):
         "📖 Foydalanish:\n"
         "• Story havolasini yuboring\n"
         "  Misol: https://t.me/username/s/123\n"
-        "• Yoki @username yuboring\n"
-        "  (barcha ochiq storylar yuklanadi)\n\n"
+        "• Yoki @username yuboring\n\n"
         "⚡ Bot 24/7 ishlaydi!"
     )
 
@@ -45,6 +44,8 @@ async def handle_message(event):
     try:
         story_match = re.search(r't\.me/([^/]+)/s/(\d+)', text)
         username_match = re.search(r'@([a-zA-Z][a-zA-Z0-9_]{4,})', text)
+
+        os.makedirs('downloads', exist_ok=True)
 
         if story_match:
             username = story_match.group(1)
@@ -87,7 +88,7 @@ async def handle_message(event):
                         await bot.send_file(event.chat_id, file)
                         os.remove(file)
                         await asyncio.sleep(1)
-                except:
+                except Exception:
                     continue
 
             await msg.delete()
@@ -103,12 +104,14 @@ async def handle_message(event):
     except Exception as e:
         await msg.edit(f"❌ Xatolik: {str(e)}")
 
-os.makedirs('downloads', exist_ok=True)
-
 async def main():
     await userbot.start()
     print("✅ Userbot ishga tushdi!")
+    await bot.start(bot_token=BOT_TOKEN)
     print("✅ Bot ishga tushdi!")
-    await bot.run_until_disconnected()
+    await asyncio.gather(
+        userbot.run_until_disconnected(),
+        bot.run_until_disconnected()
+    )
 
 asyncio.run(main())
