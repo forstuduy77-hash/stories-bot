@@ -106,6 +106,29 @@ async def handle_message(event):
     if event.text and event.text.startswith("/"):
         return
 
+    # ── Forward qilingan story ─────────────────────────────────────────────
+    if event.forward and hasattr(event.forward, 'story') and event.forward.story:
+        msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
+        try:
+            fwd = event.forward
+            story_obj = fwd.story  # MessageStory objekti
+            peer = fwd.from_id     # story kimdan forward qilingan
+
+            entity = await userbot.get_entity(peer)
+            story = await get_story_by_id(entity, story_obj.id)
+
+            if story is None:
+                await msg.edit("❌ Story topilmadi yoki muddati o'tgan!")
+            else:
+                sent = await download_and_send(event, story)
+                if sent:
+                    await msg.delete()
+                else:
+                    await msg.edit("❌ Media yuklab bo'lmadi!")
+        except Exception as e:
+            await msg.edit(f"❌ Xatolik: {str(e)}")
+        return
+
     text = event.text or ""
     msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
 
