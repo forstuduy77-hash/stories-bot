@@ -93,7 +93,7 @@ async def handle_message(event):
                 "❌ Noto'g'ri format!\n\n"
                 "To'g'ri formatlar:\n"
                 "• https://t.me/username/s/123\n"
-                "• @username"
+                "• @username" 
             )
 
     except Exception as e:
