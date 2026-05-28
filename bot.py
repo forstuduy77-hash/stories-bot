@@ -1,6 +1,7 @@
 import os
 import asyncio
 import re
+from io import BytesIO
 from datetime import datetime, timezone
 from telethon import TelegramClient, events
 from telethon.tl.functions.stories import (
@@ -69,14 +70,18 @@ async def get_story_by_id(entity, story_id: int):
 
 
 async def download_and_send(event, story, caption="✅ Story saqlandi!"):
-    """Storydagi mediani yuklab, botga yuboradi va faylni o'chiradi."""
-    os.makedirs("downloads", exist_ok=True)
-    file = await userbot.download_media(story.media, file="downloads/")
-    if file:
-        await bot.send_file(event.chat_id, file, caption=caption)
-        os.remove(file)
-        return True
-    return False
+    """Storydagi mediani xotiradan yuboradi — disk ishlatilmaydi."""
+    buf = BytesIO()
+    await userbot.download_media(story.media, file=buf)
+    buf.seek(0)
+    if buf.getbuffer().nbytes == 0:
+        return False
+    # Fayl nomini media turidan aniqlash
+    from telethon.tl.types import MessageMediaPhoto
+    ext = ".jpg" if isinstance(story.media, MessageMediaPhoto) else ".mp4"
+    buf.name = f"story{ext}"
+    await bot.send_file(event.chat_id, buf, caption=caption)
+    return True
 
 
 # ── /start ────────────────────────────────────────────────────────────────────
