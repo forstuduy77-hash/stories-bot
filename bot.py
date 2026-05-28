@@ -2,7 +2,11 @@ import os
 import asyncio
 import re
 from telethon import TelegramClient, events
-from telethon.tl.functions.stories import GetPeerStoriesRequest
+from telethon.tl.functions.stories import (
+    GetPeerStoriesRequest,
+    GetStoriesByIDRequest,
+    GetStoriesArchiveRequest,
+)
 from telethon.sessions import StringSession
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -11,105 +15,146 @@ API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
 
 userbot = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
-bot = TelegramClient('bot', API_ID, API_HASH)
+bot = TelegramClient("bot", API_ID, API_HASH)
 
-@bot.on(events.NewMessage(pattern='/start'))
+
+async def get_story_by_id(entity, story_id: int):
+    """
+    Story ID bo'yicha qidiradi:
+    1) GetStoriesByIDRequest — eng tez yo'l (jonli + arxiv)
+    2) GetPeerStoriesRequest — jonli storylar fallback
+    3) GetStoriesArchiveRequest — arxivdan qidirish fallback
+    """
+    # 1. To'g'ridan-to'g'ri ID bo'yicha so'rash (eng ishonchli)
+    try:
+        result = await userbot(GetStoriesByIDRequest(peer=entity, id=[story_id]))
+        if result.stories:
+            return result.stories[0]
+    except Exception:
+        pass
+
+    # 2. Jonli storylardan qidirish
+    try:
+        result = await userbot(GetPeerStoriesRequest(peer=entity))
+        for story in result.stories.stories:
+            if story.id == story_id:
+                return story
+    except Exception:
+        pass
+
+    # 3. Arxivdan qidirish (sahifalab)
+    try:
+        offset_id = 0
+        while True:
+            archive = await userbot(
+                GetStoriesArchiveRequest(peer=entity, offset_id=offset_id, limit=100)
+            )
+            if not archive.stories:
+                break
+            for story in archive.stories:
+                if story.id == story_id:
+                    return story
+                # Arxiv ID kamayib boradi, agar o'tib ketgan bo'lsa to'xtat
+                if story.id < story_id:
+                    return None
+            offset_id = archive.stories[-1].id
+    except Exception:
+        pass
+
+    return None
+
+
+async def download_and_send(event, story, caption="✅ Story saqlandi!"):
+    """Storydagi mediani yuklab, botga yuboradi va faylni o'chiradi."""
+    os.makedirs("downloads", exist_ok=True)
+    file = await userbot.download_media(story.media, file="downloads/")
+    if file:
+        await bot.send_file(event.chat_id, file, caption=caption)
+        os.remove(file)
+        return True
+    return False
+
+
+# ── /start ────────────────────────────────────────────────────────────────────
+@bot.on(events.NewMessage(pattern="/start"))
 async def start(event):
     await event.respond(
         "👋 Salom! Men Telegram Stories Saver botiman!\n\n"
         "📖 Foydalanish:\n"
         "• Story havolasini yuboring\n"
         "  Misol: https://t.me/username/s/123\n"
-        "• Yoki @username yuboring\n\n"
+        "• Yoki @username yuboring (barcha ochiq storylar)\n\n"
         "⚡ Bot 24/7 ishlaydi!"
     )
 
+
+# ── /help ─────────────────────────────────────────────────────────────────────
+@bot.on(events.NewMessage(pattern="/help"))
+async def help_cmd(event):
+    await event.respond(
+        "🆘 Yordam:\n\n"
+        "✅ Bitta story:\n"
+        "  https://t.me/username/s/123\n\n"
+        "✅ Barcha ochiq storylar:\n"
+        "  @username"
+    )
+
+
+# ── Asosiy handler ────────────────────────────────────────────────────────────
 @bot.on(events.NewMessage)
 async def handle_message(event):
-    if event.text and event.text.startswith('/'):
+    if event.text and event.text.startswith("/"):
         return
 
     text = event.text or ""
     msg = await event.respond("⏳ Yuklanmoqda, iltimos kuting...")
 
     try:
-        os.makedirs('downloads', exist_ok=True)
+        story_match = re.search(r"t\.me/([^/]+)/s/(\d+)", text)
+        username_match = re.search(r"@([a-zA-Z][a-zA-Z0-9_]{4,})", text)
 
-        # t.me/username/s/ID formatini qidirish
-        story_match = re.search(r't\.me/([^/\s]+)/s/(\d+)', text)
-        # @username formatini qidirish
-        username_match = re.search(r'@([a-zA-Z][a-zA-Z0-9_]{3,})', text)
-
+        # ── Bitta story (havola orqali) ────────────────────────────────────
         if story_match:
             username = story_match.group(1)
             story_id = int(story_match.group(2))
 
-            try:
-                entity = await userbot.get_entity(username)
-                result = await userbot(GetPeerStoriesRequest(peer=entity))
-                stories = result.stories.stories
+            entity = await userbot.get_entity(username)
+            story = await get_story_by_id(entity, story_id)
 
-                # Avval ID bo'yicha qidirish
-                found = False
-                for story in stories:
-                    if story.id == story_id:
-                        file = await userbot.download_media(story.media, file='downloads/')
-                        if file:
-                            await bot.send_file(event.chat_id, file, caption="✅ Story saqlandi!")
-                            os.remove(file)
-                            found = True
-                        break
+            if story is None:
+                await msg.edit("❌ Story topilmadi yoki muddati o'tgan!")
+                return
 
-                # Topilmasa — barcha mavjud storylarni yuborish
-                if not found:
-                    if stories:
-                        await msg.edit(f"⚠️ Bu story arxivda yo'q, lekin {len(stories)} ta joriy story bor. Yuborilmoqda...")
-                        for story in stories:
-                            try:
-                                file = await userbot.download_media(story.media, file='downloads/')
-                                if file:
-                                    await bot.send_file(event.chat_id, file)
-                                    os.remove(file)
-                                    await asyncio.sleep(1)
-                            except Exception:
-                                continue
-                        await msg.delete()
-                    else:
-                        await msg.edit("❌ Story topilmadi yoki muddati o'tgan!")
-                else:
-                    await msg.delete()
+            sent = await download_and_send(event, story)
+            if sent:
+                await msg.delete()
+            else:
+                await msg.edit("❌ Media yuklab bo'lmadi!")
 
-            except Exception as e:
-                await msg.edit(f"❌ Xatolik: {str(e)}")
-
+        # ── Barcha ochiq storylar (@username) ──────────────────────────────
         elif username_match:
             username = username_match.group(1)
-            try:
-                entity = await userbot.get_entity(username)
-                result = await userbot(GetPeerStoriesRequest(peer=entity))
-                stories = result.stories.stories
+            entity = await userbot.get_entity(username)
 
-                if not stories:
-                    await msg.edit("❌ Bu foydalanuvchining ochiq storylari yo'q!")
-                    return
+            result = await userbot(GetPeerStoriesRequest(peer=entity))
+            stories = result.stories.stories
 
-                await msg.edit(f"✅ {len(stories)} ta story topildi, yuborilmoqda...")
+            if not stories:
+                await msg.edit("❌ Bu foydalanuvchining ochiq storylari yo'q!")
+                return
 
-                for story in stories:
-                    try:
-                        file = await userbot.download_media(story.media, file='downloads/')
-                        if file:
-                            await bot.send_file(event.chat_id, file)
-                            os.remove(file)
-                            await asyncio.sleep(1)
-                    except Exception:
-                        continue
+            await msg.edit(f"✅ {len(stories)} ta story topildi, yuborilmoqda...")
 
-                await msg.delete()
+            for story in stories:
+                try:
+                    await download_and_send(event, story)
+                    await asyncio.sleep(1)
+                except Exception:
+                    continue
 
-            except Exception as e:
-                await msg.edit(f"❌ Xatolik: {str(e)}")
+            await msg.delete()
 
+        # ── Noto'g'ri format ───────────────────────────────────────────────
         else:
             await msg.edit(
                 "❌ Noto'g'ri format!\n\n"
@@ -119,8 +164,10 @@ async def handle_message(event):
             )
 
     except Exception as e:
-        await msg.edit(f"❌ Umumiy xatolik: {str(e)}")
+        await msg.edit(f"❌ Xatolik: {str(e)}")
 
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 async def main():
     await userbot.start()
     print("✅ Userbot ishga tushdi!")
@@ -128,7 +175,8 @@ async def main():
     print("✅ Bot ishga tushdi!")
     await asyncio.gather(
         userbot.run_until_disconnected(),
-        bot.run_until_disconnected()
+        bot.run_until_disconnected(),
     )
+
 
 asyncio.run(main())
