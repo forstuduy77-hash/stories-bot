@@ -202,7 +202,7 @@ async def start(event):
         "👋 Salom! Men Telegram Stories Saver botiman!\n\n"
         "📖 Foydalanish:\n"
         "• Story havolasini yuboring\n"
-        "  Misol: https://t.me/username/s/123\n"
+        "  Misol: https://t .me/username/s/123\n"
         "• Yoki @username yuboring (barcha ochiq storylar)\n\n"
         "⚡ Bot 24/7 ishlaydi!"
     )
@@ -213,7 +213,7 @@ async def help_cmd(event):
     await event.respond(
         "🆘 Yordam:\n\n"
         "✅ Bitta story:\n"
-        "  https://t.me/username/s/123\n\n"
+        "  https://t .me/username/s/123\n\n"
         "✅ Barcha ochiq storylar:\n"
         "  @username"
     )
