@@ -88,7 +88,7 @@ async def download_and_send(event, story, msg=None, caption="✅ Story saqlandi!
 
     timer_task = asyncio.create_task(show_timer())
     try:
-        await userbot.download_media(story.media, file=buf)
+        await userbot.download_media(story.media, file=buf, workers=4)
     finally:
         done = True
         timer_task.cancel()
