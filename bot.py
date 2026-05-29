@@ -142,7 +142,7 @@ async def process_event(event):
         await event.respond(
             "❌ Noto'g'ri format!\n\n"
             "To'g'ri formatlar:\n"
-            "• https://t.me/username/s/123\n"
+            "• https://t .me/username/s/123\n"
             "• @username"
         )
         return
