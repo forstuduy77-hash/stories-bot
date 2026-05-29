@@ -219,15 +219,24 @@ async def help_cmd(event):
     )
 
 
+# Bloklangan foydalanuvchilar — reklama yuboruvchilar
+BLOCKED_USERS = set(map(int, os.environ.get("BLOCKED_USERS", "").split(","))) if os.environ.get("BLOCKED_USERS") else set()
+
+
 @bot.on(events.NewMessage)
 async def handle_message(event):
     if event.text and event.text.startswith("/"):
         return
     if event.date and event.date < STARTUP_TIME:
         return
-    if ALLOWED_USERS and event.sender_id not in ALLOWED_USERS:
-        await event.respond("⛔ Sizga ruxsat yo'q!")
+
+    # Bloklangan foydalanuvchi — jim o'tkazib yuborish
+    if event.sender_id in BLOCKED_USERS:
         return
+
+    if ALLOWED_USERS and event.sender_id not in ALLOWED_USERS:
+        print(f"BLOCK_THIS_ID={event.sender_id}")
+        return  # Jim o'tish
 
     uid = event.sender_id
     if uid not in queues:
